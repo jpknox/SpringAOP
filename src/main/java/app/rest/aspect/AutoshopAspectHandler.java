@@ -1,8 +1,9 @@
-package app.rest.data;
+package app.rest.aspect;
 
+import app.rest.data.identity.IdentityCheck;
 import org.aspectj.lang.JoinPoint;
-import org.aspectj.lang.annotation.After;
 import org.aspectj.lang.annotation.AfterReturning;
+import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Before;
 import org.slf4j.Logger;
@@ -23,6 +24,9 @@ import java.util.Map;
 public class AutoshopAspectHandler {
 
 	@Autowired
+	private IdentityCheck identityCheck;
+
+	@Autowired
 	private HttpServletRequest request;
 
 	private Logger logger = LoggerFactory.getLogger(AutoshopAspectHandler.class);
@@ -34,13 +38,19 @@ public class AutoshopAspectHandler {
 		logger.info("\t\t'" + method + "' was called.");
 	}
 
-	@Before("execution (* app.rest.InboundAutoshop.*(..))")
-	public void checkCredentials(JoinPoint _joinPoint) {
+	@Around("within(@org.springframework.web.bind.annotation.RestController *) && execution(* *(..))")
+	public Object checkCredentials(JoinPoint _joinPoint) throws Throwable {
 		MethodInvocationProceedingJoinPoint joinPoint = (MethodInvocationProceedingJoinPoint) _joinPoint;
 		Map<String, String> headers = (Map<String, String>) joinPoint.getArgs()[0];
 		String clientId = headers.get("client-id");
 		String endpoint = request.getRequestURI();
-		logger.info("\t\t'" + clientId + "' was granted entry to resource '" + endpoint + "'.");
+		if (identityCheck.isAllowedToLogin(clientId)) {
+			logger.info("\t\t'" + clientId + "' was granted entry to resource '" + endpoint + "'.");
+			return joinPoint.proceed();
+		}
+		logger.info("\t\t'" + clientId + "' was rejected entry to resource '" + endpoint + "'.");
+		return "'" + clientId + "' was rejected access to '" + endpoint + "'.";
+		//throw new SecurityException("'" + clientId + "' was rejected access to '" + endpoint + "'.");
 	}
 
 	@AfterReturning(value = "execution(* app.rest.*.*(..))",
